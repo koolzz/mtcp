@@ -495,6 +495,17 @@ set_listen_backlog(server *srv)
 int 
 core_affinitize(int cpu)
 {
+	
+	cpu_set_t cpuset;
+	int ret;
+
+	CPU_ZERO(&cpuset);
+	CPU_SET(cpu, &cpuset);
+	
+	ret = sched_setaffinity(0, sizeof(cpuset), &cpuset);
+
+	return ret;
+	/*
 	cpu_set_t *cmask;
 	struct bitmask *bmask;
 	size_t n;
@@ -510,7 +521,7 @@ core_affinitize(int cpu)
 	cmask = CPU_ALLOC(n);
 	if (cmask == NULL)
 		return -1;
-
+	
 	CPU_ZERO_S(n, cmask);
 	CPU_SET_S(cpu, n, cmask);
 
@@ -529,6 +540,7 @@ core_affinitize(int cpu)
 	numa_bitmask_free(bmask);
 
 	return ret;
+	*/
 }
 /*----------------------------------------------------------------------------*/
 static int
@@ -563,7 +575,7 @@ init_server_states(server ***srv_states, int cpus,
 #endif
 	
 	/* now do the same for all remaining reserved cpus */
-	for (i = 1; i < cpus; i++) {
+	for (i = cpus; i <= cpus; i++) {
 		/* initialize it */
 		if (NULL == ((*srv_states)[i] = server_init())) {
 			fprintf(stderr, "%s: %d(%s) - Can't allocate memory for %dth srv_state entry\n", 
@@ -1218,6 +1230,7 @@ main(int argc, char **argv) {
 	struct mtcp_conf mcfg;
 #endif
 #endif
+	char *mtcp_config = NULL;
 	/* 
 	 * The introduction of MTCP slightly changes the purpose of *srv.
 	 * *srv will always hold the srv state info for core 0.
@@ -1274,7 +1287,7 @@ main(int argc, char **argv) {
 	srv->srvconf.port = 0;
 	srv->srvconf.dont_daemonize = 0;
 
-	while(-1 != (o = getopt(argc, argv, "f:m:n:hvVDpt"))) {
+	while(-1 != (o = getopt(argc, argv, "f:m:n:z:hVDpt"))) {
 		switch(o) {
 		case 'f':
 			if (srv->config_storage) {
@@ -1294,6 +1307,13 @@ main(int argc, char **argv) {
 #endif
 			if (config_read(srv, optarg)) {
 				server_free(srv);
+				return EXIT_FAILURE;
+			}
+			break;
+		case 'z':
+			mtcp_config = strdup(optarg);
+			if (NULL == mtcp_config) {
+				fprintf(stderr, "MTCP config null\n");
 				return EXIT_FAILURE;
 			}
 			break;
@@ -1591,10 +1611,10 @@ main(int argc, char **argv) {
 	 * not set core_limit after mtcp_init()
 	 */
 	mtcp_getconf(&mcfg);
-	mcfg.num_cores = cpus;
+	mcfg.num_cores = cpus + 1;
 	mtcp_setconf(&mcfg);
 	/* initialize the mtcp context */
-	if (mtcp_init("mtcp.conf")) {
+	if (mtcp_init(mtcp_config)) {
 		fprintf(stderr, "Failed to initialize mtcp\n");
 		goto clean_up;
 	}
@@ -1607,7 +1627,7 @@ main(int argc, char **argv) {
 	mtcp_register_signal(SIGINT, signal_handler);
 #endif
 	/* now spawn the threads and initialize the underlying networking layer */
-	for (i = 0; i < cpus; i++) {
+	for (i = cpus; i <= cpus; i++) {
 		srv_states[i]->cpu = i;
 #if 0
 		start_server((void *)srv_states[i]);
@@ -2266,14 +2286,14 @@ main(int argc, char **argv) {
 
 #ifdef MULTI_THREADED
 	/* main thread waits... */
-	for (i = 0; i < cpus; i++)
+	for (i = cpus; i <= cpus; i++)
 		pthread_join(srv_states[i]->running_thread, NULL);
  clean_up:
 #ifdef USE_MTCP
 	/* destroy mtcp context */
 	mtcp_destroy();
 #endif
-	for (i = 0; i < cpus; i++) {
+	for (i = cpus; i <= cpus; i++) {
 		srv = srv_states[i];
 #endif /* MULTI_THREADED */
 		/* clean-up */
