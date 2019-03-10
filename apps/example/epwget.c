@@ -74,7 +74,7 @@ static in_addr_t saddr;
 /*----------------------------------------------------------------------------*/
 static int total_flows;
 static int flows[MAX_CPUS];
-static int flowcnt = 0;
+//static int flowcnt = 0;
 static int concurrency;
 static int max_fds;
 static uint64_t response_size = 0;
@@ -232,11 +232,14 @@ CloseConnection(thread_context_t ctx, int sockid)
 static inline int 
 SendHTTPRequest(thread_context_t ctx, int sockid, struct wget_vars *wv)
 {
-	char request[HTTP_HEADER_LEN];
+	//char request[HTTP_HEADER_LEN];
+        char request[1024];
 	struct mtcp_epoll_event ev;
 	int wr;
 	int len;
 
+        memcpy(request, "hello there m8!", sizeof(request));  
+#if 0
 	wv->headerset = FALSE;
 	wv->recv = 0;
 	wv->header_len = wv->file_len = 0;
@@ -248,7 +251,8 @@ SendHTTPRequest(thread_context_t ctx, int sockid, struct wget_vars *wv)
 //			"Connection: Keep-Alive\r\n\r\n", 
 			"Connection: Close\r\n\r\n", 
 			url, host);
-	len = strlen(request);
+#endif
+        len = strlen(request);
 
 	wr = mtcp_write(ctx->mctx, sockid, request, len);
 	if (wr < len) {
@@ -263,6 +267,7 @@ SendHTTPRequest(thread_context_t ctx, int sockid, struct wget_vars *wv)
 	ev.data.sockid = sockid;
 	mtcp_epoll_ctl(ctx->mctx, ctx->ep, MTCP_EPOLL_CTL_MOD, sockid, &ev);
 
+        /*
 	gettimeofday(&wv->t_start, NULL);
 
 	char fname[MAX_FILE_LEN + 1];
@@ -274,6 +279,7 @@ SendHTTPRequest(thread_context_t ctx, int sockid, struct wget_vars *wv)
 			exit(1);
 		}
 	}
+        */
 
 	return 0;
 }
@@ -290,6 +296,24 @@ DownloadComplete(thread_context_t ctx, int sockid, struct wget_vars *wv)
 	gettimeofday(&wv->t_end, NULL);
 	CloseConnection(ctx, sockid);
 	ctx->stat.completes++;
+	tdiff = (wv->t_end.tv_sec - wv->t_start.tv_sec) * 1000000 + 
+			(wv->t_end.tv_usec - wv->t_start.tv_usec);
+	TRACE_APP("Socket %d Total received bytes: %lu (%luMB)\n", 
+			sockid, wv->recv, wv->recv / 1000000);
+	TRACE_APP("Socket %d Total spent time: %lu us\n", sockid, tdiff);
+	if (tdiff > 0) {
+		TRACE_APP("Socket %d Average bandwidth: %lf[MB/s]\n", 
+				sockid, (double)wv->recv / tdiff);
+	}
+	ctx->stat.sum_resp_time += tdiff;
+	if (tdiff > ctx->stat.max_resp_time)
+		ctx->stat.max_resp_time = tdiff;
+
+	if (fio && wv->fd > 0)
+		close(wv->fd);
+        return 0;
+
+
 	if (response_size == 0) {
 		response_size = wv->recv;
 		fprintf(stderr, "Response size set to %lu\n", response_size);
@@ -326,8 +350,13 @@ HandleReadEvent(thread_context_t ctx, int sockid, struct wget_vars *wv)
 	char *pbuf;
 	int rd, copy_len;
 
-	rd = 1;
-	while (rd > 0) {
+	rd = mtcp_read(mctx, sockid, buf, BUF_SIZE);
+	//printf("Recieved data - %s\n", buf);
+	DownloadComplete(ctx, sockid, wv);
+        return 0;
+
+
+        while (rd > 0) {
 		rd = mtcp_read(mctx, sockid, buf, BUF_SIZE);
 		if (rd <= 0)
 			break;

@@ -1564,6 +1564,11 @@ mtcp_destroy()
 	for (i = 0; i < CONFIG.eths_num; i++)
 		DestroyAddressPool(ap[i]);
 
+#ifdef ENABLE_ONVM
+                onvm_nflib_stop(CONFIG.nf_info);
+#endif
+
+
 #ifndef DISABLE_DPDK
 	mpz_clear(CONFIG._cpumask);
 #endif
