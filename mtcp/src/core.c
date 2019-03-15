@@ -139,7 +139,8 @@ AttachDevice(struct mtcp_thread_context* ctx)
 	int working = -1;
 	mtcp_manager_t mtcp = ctx->mtcp_manager;
 
-	working = mtcp->iom->link_devices(ctx);
+	//working = mtcp->iom->link_devices(ctx);
+        working = 1;
 
 	return working;
 }
@@ -1112,7 +1113,7 @@ MTCPRunThread(void *arg)
 	mtcp->iom = current_iomodule_func;
 
 	/* I/O initializing */
-	mtcp->iom->init_handle(ctx);
+	//mtcp->iom->init_handle(ctx);
 
 	if (pthread_mutex_init(&ctx->smap_lock, NULL)) {
 		perror("pthread_mutex_init of ctx->smap_lock\n");
@@ -1535,7 +1536,7 @@ mtcp_init(const char *config_file)
 	app_signal_handler = NULL;
 
 	/* load system-wide io module specs */
-	current_iomodule_func->load_module();
+	//current_iomodule_func->load_module();
 
 	return 0;
 }
