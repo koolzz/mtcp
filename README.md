@@ -282,7 +282,7 @@ To prevent this, use the base virtual address parameter to run the ONVM manager,
 
 ```bash
 cd openNetVM/onvm  
-./go.sh 1,2,3 1 -s stdout -a 0x7f000000000 
+./go.sh 1,2,3 1 0 -s stdout -a 0x7f000000000 
 ```
 
 ### ***NETMAP VERSION***
